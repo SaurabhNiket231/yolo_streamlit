@@ -18,6 +18,7 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parallel import DistributedDataParallel as DDP
+import torchvision
 
 from utils.general import LOGGER, check_version, colorstr, file_date, git_describe
 
@@ -374,6 +375,24 @@ def smart_resume(ckpt, optimizer, ema=None, weights='yolov5s.pt', epochs=300, re
         LOGGER.info(f"{weights} has been trained for {ckpt['epoch']} epochs. Fine-tuning for {epochs} more epochs.")
         epochs += ckpt['epoch']  # finetune additional epochs
     return best_fitness, start_epoch, epochs
+
+def load_classifier(name='resnet101', n=2):
+    # Loads a pretrained model reshaped to n-class output
+    model = torchvision.models.__dict__[name](pretrained=True)
+
+    # ResNet model properties
+    # input_size = [3, 224, 224]
+    # input_space = 'RGB'
+    # input_range = [0, 1]
+    # mean = [0.485, 0.456, 0.406]
+    # std = [0.229, 0.224, 0.225]
+
+    # Reshape output to n classes
+    filters = model.fc.weight.shape[1]
+    model.fc.bias = nn.Parameter(torch.zeros(n), requires_grad=True)
+    model.fc.weight = nn.Parameter(torch.zeros(n, filters), requires_grad=True)
+    model.fc.out_features = n
+    return model
 
 
 class EarlyStopping:
